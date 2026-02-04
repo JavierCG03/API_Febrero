@@ -658,16 +658,16 @@ namespace CarSlineAPI.Models.Entities
         public DateTime FechaUltimoServicio { get; set; } = DateTime.Today;
 
         [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
-        public DateTime? FechaProximoServicio { get; private set; }
+        public DateTime FechaProximoServicio { get; private set; }
 
         [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
-        public DateTime? FechaPrimerRecordatorio { get; private set; }
+        public DateTime FechaPrimerRecordatorio { get; private set; }
 
         [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
-        public DateTime? FechaSegundoRecordatorio { get; private set; }
+        public DateTime FechaSegundoRecordatorio { get; private set; }
 
         [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
-        public DateTime? FechaTercerRecordatorio { get; private set; }
+        public DateTime FechaTercerRecordatorio { get; private set; }
 
         [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
         public int? KilometrajeProximoServicio { get; private set; }
