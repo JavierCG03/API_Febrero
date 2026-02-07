@@ -692,6 +692,50 @@ namespace CarSlineAPI.Models.Entities
 
     }
 
+    [Table("Citas")]
+    public class Cita
+    {
+        [Key]
+        public int Id { get; set; }
+        public int TipoOrdenId { get; set; } 
+        public int ClienteId { get; set; }
+        public int VehiculoId { get; set; }
+        public int EncargadoCitasId { get; set; }
+        public int? TipoServicioId { get; set; }
+        public DateTime FechaCreacion { get; set; } = DateTime.Now;
+        public DateTime FechaCita { get; set; }
+        public bool Activo { get; set; } = true;
+
+        // relaciones
+        public virtual Cliente Cliente { get; set; }
+        public virtual Vehiculo Vehiculo { get; set; }
+        public virtual Usuario EncargadoCitas { get; set; }
+        public virtual TipoOrden TipoOrden { get; set; }
+        public virtual TipoServicio TipoServicio { get; set; }
+
+    }
+
+    [Table("trabajosporcita")]
+    public class TrabajoPorCita
+    {
+        [Key]
+        public int Id { get; set; }
+
+        [Required]
+        public int CitaId { get; set; }
+
+        [Required]
+        [Column(TypeName = "TEXT")]
+        public string Trabajo { get; set; } = string.Empty;
+
+        public string? IndicacionesTrabajo { get; set; }
+
+        public bool Activo { get; set; } = true;
+
+        // Navegación
+        [ForeignKey("CitaId")]
+        public virtual Cita? Cita { get; set; }
+    }
 }
 
 

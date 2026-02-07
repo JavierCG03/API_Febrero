@@ -94,6 +94,7 @@ namespace CarSlineAPI.Models.DTOs
         public string Message { get; set; } = string.Empty;
         public decimal CostoManoObra { get; set; }
     }
+
     /// <summary>
     /// DTO completo de orden con trabajos
     /// </summary>
@@ -134,8 +135,6 @@ namespace CarSlineAPI.Models.DTOs
         public bool TieneTrabajosEnProceso => Trabajos.Any(t => t.EnProceso);
         public bool TieneTrabajosCompletados => Trabajos.Any(t => t.EstaCompletado);
     }
-
-
 
     /// <summary>
     /// Request para crear orden con lista de trabajos

@@ -22,9 +22,6 @@ namespace CarSlineAPI.Controllers
         /// Obtener recordatorios por tipo (1 = Primero, 2 = Segundo, 3 = Tercero)
         /// GET api/Recordatorios/{tipoRecordatorio}
         /// </summary>
-        /// 
-
-
         [HttpGet("{tipoRecordatorio}")]
         [ProducesResponseType(typeof(ObtenerRecordatoriosResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -41,18 +38,16 @@ namespace CarSlineAPI.Controllers
 
             try
             {
-                var fechaHoy = DateTime.Today.AddMonths(2).AddDays(29);
+                var fechaHoy = DateTime.Today.AddMonths(3).AddDays(26);
                 List<RecordatorioServicioSimpleDto> recordatorios;
 
                 switch (tipoRecordatorio)
                 {
                     case 1: // PRIMER RECORDATORIO
-
                         var primeros = await _db.ProximosServicios
                             .Where(ps => ps.Activo
                                       && !ps.PrimerRecordatorio
                                       && ps.FechaPrimerRecordatorio <= fechaHoy)
-
                             .Select(ps => new RecordatorioServicioSimpleDto
                             {
                                 Id = ps.Id,
@@ -66,13 +61,12 @@ namespace CarSlineAPI.Controllers
                         recordatorios = primeros;
                         break;
 
-
                     case 2: // SEGUNDO RECORDATORIO
                         var segundos = await _db.ProximosServicios
                             .Where(ps => ps.Activo
                                       && ps.PrimerRecordatorio
                                       && !ps.SegundoRecordatorio
-                                      && ps.FechaSegundoRecordatorio <= fechaHoy)                            
+                                      && ps.FechaSegundoRecordatorio <= fechaHoy)
                             .Select(ps => new RecordatorioServicioSimpleDto
                             {
                                 Id = ps.Id,
@@ -109,7 +103,6 @@ namespace CarSlineAPI.Controllers
                         break;
 
                     default:
-
                         recordatorios = new List<RecordatorioServicioSimpleDto>();
                         break;
                 }
@@ -142,6 +135,61 @@ namespace CarSlineAPI.Controllers
                 {
                     Success = false,
                     Message = "Error al obtener recordatorios"
+                });
+            }
+        }
+
+        /// <summary>
+        /// Obtener detalle completo de un recordatorio específico
+        /// GET api/Recordatorios/detalle/{id}
+        /// </summary>
+        [HttpGet("detalle/{id}")]
+        [ProducesResponseType(typeof(ObtenerRecordatorioResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> ObtenerDetalleRecordatorio(int id)
+        {
+            try
+            {
+                _logger.LogInformation($"📥 Obteniendo detalle del recordatorio ID: {id}");
+
+                var proximoServicio = await _db.ProximosServicios
+                    .Include(ps => ps.Cliente)
+                    .Include(ps => ps.Vehiculo)
+                    .Where(ps => ps.Id == id && ps.Activo)
+                    .FirstOrDefaultAsync();
+
+                if (proximoServicio == null)
+                {
+                    _logger.LogWarning($"⚠️ Recordatorio ID {id} no encontrado o inactivo");
+                    return NotFound(new ObtenerRecordatorioResponse
+                    {
+                        Success = false,
+                        Message = "Recordatorio no encontrado o inactivo",
+                        Recordatorios = new List<RecordatorioServicioDto>()
+                    });
+                }
+
+                // Mapear usando el método auxiliar existente
+                var recordatorioDetalle = MapearRecordatorio(proximoServicio);
+
+                _logger.LogInformation($"✅ Detalle del recordatorio ID {id} obtenido exitosamente");
+
+                return Ok(new ObtenerRecordatorioResponse
+                {
+                    Success = true,
+                    Message = "Detalle del recordatorio obtenido exitosamente",
+                    Recordatorios = new List<RecordatorioServicioDto> { recordatorioDetalle }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"❌ Error al obtener detalle del recordatorio ID {id}");
+                return StatusCode(500, new ObtenerRecordatorioResponse
+                {
+                    Success = false,
+                    Message = $"Error al obtener el detalle del recordatorio: {ex.Message}",
+                    Recordatorios = new List<RecordatorioServicioDto>()
                 });
             }
         }
@@ -246,16 +294,16 @@ namespace CarSlineAPI.Controllers
 
                 var primerRecordatorio = await _db.ProximosServicios
                     .CountAsync(ps => ps.Activo && !ps.PrimerRecordatorio
-                                   && ps.FechaPrimerRecordatorio<= fechaHoy);
+                                   && ps.FechaPrimerRecordatorio <= fechaHoy);
 
                 var segundoRecordatorio = await _db.ProximosServicios
                     .CountAsync(ps => ps.Activo && ps.PrimerRecordatorio && !ps.SegundoRecordatorio
-                                   && ps.FechaSegundoRecordatorio<= fechaHoy);
+                                   && ps.FechaSegundoRecordatorio <= fechaHoy);
 
                 var tercerRecordatorio = await _db.ProximosServicios
                     .CountAsync(ps => ps.Activo && ps.PrimerRecordatorio && ps.SegundoRecordatorio
                                    && !ps.TercerRecordatorio
-                                   && ps.FechaTercerRecordatorio<= fechaHoy);
+                                   && ps.FechaTercerRecordatorio <= fechaHoy);
 
                 return Ok(new
                 {
@@ -284,23 +332,22 @@ namespace CarSlineAPI.Controllers
             return new RecordatorioServicioDto
             {
                 Id = ps.Id,
-                ClienteId = ps.ClienteId,
                 ClienteNombre = ps.Cliente?.NombreCompleto ?? "",
-                ClienteTelefono = ps.Cliente?.TelefonoMovil ?? "",
-                VehiculoId = ps.VehiculoId,
-                VehiculoInfo = ps.Vehiculo != null
-                    ? $"{ps.Vehiculo.Marca} {ps.Vehiculo.Modelo} {ps.Vehiculo.Anio}"
+                Telefono = ps.Cliente?.TelefonoMovil ?? "",
+                TelefonoCasa = ps.Cliente?.TelefonoCasa ?? "",
+                Correo = ps.Cliente?.CorreoElectronico ?? "Sin Correo Registrado",
+                InfoVehiculo = ps.Vehiculo != null
+                    ? $"{ps.Vehiculo.Marca} {ps.Vehiculo.Modelo} {ps.Vehiculo.Anio} {ps.Vehiculo.Version}"
                     : "",
                 VIN = ps.Vehiculo?.VIN ?? "",
+                Placas = ps.Vehiculo?.Placas ?? "Sin Placas",
+
                 UltimoServicioRealizado = ps.UltimoServicioRealizado,
                 FechaUltimoServicio = ps.FechaUltimoServicio,
                 UltimoKilometraje = ps.UltimoKilometraje,
                 TipoProximoServicio = ps.TipoProximoServicio,
                 FechaProximoServicio = ps.FechaProximoServicio,
                 KilometrajeProximoServicio = ps.KilometrajeProximoServicio,
-                FechaPrimerRecordatorio = ps.FechaPrimerRecordatorio,
-                FechaSegundoRecordatorio = ps.FechaSegundoRecordatorio,
-                FechaTercerRecordatorio = ps.FechaTercerRecordatorio
             };
         }
     }
