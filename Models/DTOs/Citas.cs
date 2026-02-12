@@ -24,4 +24,24 @@ namespace CarSlineAPI.Models.DTOs
         public List<TrabajoCrearDto> Trabajos { get; set; } = new();
 
     }
+    /// <summary>
+    /// Request para reagendar una cita existente
+    /// </summary>
+    public class ReagendarCitaRequest
+    {
+        [Required(ErrorMessage = "La nueva fecha es requerida")]
+        public DateTime NuevaFechaCita { get; set; }
+    }
+
+    /// <summary>
+    /// Response al reagendar una cita
+    /// </summary>
+    public class ReagendarCitaResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public int CitaId { get; set; }
+        public DateTime FechaAnterior { get; set; }
+        public DateTime FechaNueva { get; set; }
+    }
 }

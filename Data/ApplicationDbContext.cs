@@ -30,8 +30,8 @@ namespace CarSlineAPI.Data
         public DbSet<Evidenciaorden> Evidenciasorden { get; set; }
         public DbSet<Refacciontrabajo> Refaccionestrabajo { get; set; }
         public DbSet<ProximoServicio> ProximosServicios { get; set; }   
-        public DbSet<Cita> citas { get; set; }
-        public DbSet<TrabajoPorCita> trabajosporcitas { get; set; }
+        public DbSet<Cita> Citas { get; set; }
+        public DbSet<TrabajoPorCita> TrabajosPorCitas { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

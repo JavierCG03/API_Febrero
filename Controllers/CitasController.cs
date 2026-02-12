@@ -49,7 +49,7 @@ namespace CarSlineAPI.Controllers
                         Activo = true
                     };
 
-                    _db.citas.Add(cita);
+                    _db.Citas.Add(cita);
                     await _db.SaveChangesAsync();
 
                     // 2. Crear trabajos asociados a la cita
@@ -63,7 +63,7 @@ namespace CarSlineAPI.Controllers
                             Activo = true
                         };
 
-                        _db.trabajosporcitas.Add(trabajo);
+                        _db.TrabajosPorCitas.Add(trabajo);
                     }
 
                     await _db.SaveChangesAsync();
@@ -101,7 +101,7 @@ namespace CarSlineAPI.Controllers
                 var fechaConsulta = (fecha ?? DateTime.Today).Date;
                 var fechaSiguiente = fechaConsulta.AddDays(1);
 
-                var citas = await _db.citas
+                var citas = await _db.Citas
                     .Include(c => c.Cliente)
                     .Include(c => c.Vehiculo)
                     .Include(c => c.TipoOrden)
@@ -114,11 +114,8 @@ namespace CarSlineAPI.Controllers
                         c.Id,
                         c.FechaCita,
                         ClienteNombre = c.Cliente.NombreCompleto,
-                        ClienteTelefono = c.Cliente.TelefonoMovil,
                         VehiculoInfo = $"{c.Vehiculo.Marca} {c.Vehiculo.Modelo} {c.Vehiculo.Anio}",
-                        TipoOrden = c.TipoOrden.NombreTipo,
-                        TipoServicio = c.TipoServicio != null ? c.TipoServicio.NombreServicio : "Sin especificar",
-                        c.FechaCreacion
+                        TipoOrden = c.TipoOrden.NombreTipo
                     })
                     .ToListAsync();
 
@@ -146,18 +143,18 @@ namespace CarSlineAPI.Controllers
         {
             try
             {
-                var cita = await _db.citas
+                var cita = await _db.Citas
                     .Include(c => c.Cliente)
                     .Include(c => c.Vehiculo)
                     .Include(c => c.TipoServicio)
-                    .Include(c => c.EncargadoCitas)
+                    .Include(c => c.TipoOrden)
                     .Where(c => c.Id == citaId && c.Activo)
                     .FirstOrDefaultAsync();
 
                 if (cita == null)
                     return NotFound(new { Success = false, Message = "Cita no encontrada" });
 
-                var trabajos = await _db.trabajosporcitas
+                var trabajos = await _db.TrabajosPorCitas
                     .Where(t => t.CitaId == citaId && t.Activo)
                     .Select(t => new
                     {
@@ -174,21 +171,126 @@ namespace CarSlineAPI.Controllers
                     {
                         cita.Id,
                         cita.FechaCita,
-                        ClienteNombre = cita.Cliente.NombreCompleto,
-                        ClienteTelefono = cita.Cliente.TelefonoMovil,
-                        VehiculoInfo = $"{cita.Vehiculo.Marca} {cita.Vehiculo.Modelo} {cita.Vehiculo.Anio}",
-                        VIN = cita.Vehiculo.VIN,
-                        TipoServicio = cita.TipoServicio?.NombreServicio ?? "Sin especificar",
-                        EncargadoNombre = cita.EncargadoCitas.NombreCompleto,
-                        cita.FechaCreacion,
+
+                        NombreCliente = cita.Cliente?.NombreCompleto ?? "No especificado",
+                        TelefonoCliente = cita.Cliente?.TelefonoMovil ?? "",
+                        DireccionCliente = cita.Cliente != null
+                            ? $"{cita.Cliente.Colonia}, Mpio.{cita.Cliente.Municipio}, Edo.{cita.Cliente.Estado}"
+                            : "Dirección no disponible",
+                        RfcCliente = cita.Cliente?.RFC ?? "",
+
+                        VehiculoCompleto = cita.Vehiculo != null
+                            ? $"{cita.Vehiculo.Marca} {cita.Vehiculo.Modelo} {cita.Vehiculo.Anio} - {cita.Vehiculo.Color}"
+                            : "Vehículo no especificado",
+
+                        VinVehiculo = cita.Vehiculo?.VIN ?? "",
+                        PlacasVehiculo = cita.Vehiculo?.Placas ?? "",
+
+                        TipoOrdenNombre = cita.TipoOrden.NombreTipo ?? "Sin tipo de orden",
+                        TipoServicioNombre = cita.TipoServicio?.NombreServicio ?? "Sin especificar",
+
                         Trabajos = trabajos
                     }
                 });
+
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Error al obtener detalle de cita {citaId}");
                 return StatusCode(500, new { Success = false, Message = "Error al obtener detalle de cita" });
+            }
+        }
+
+        /// <summary>
+        /// Reagendar una cita existente
+        /// PUT api/Citas/reagendar/{citaId}
+        /// </summary>
+        [HttpPut("reagendar/{citaId}")]
+        public async Task<IActionResult> ReagendarCita(
+            int citaId,
+            [FromBody] ReagendarCitaRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(new { Success = false, Message = "Datos inválidos" });
+
+            try
+            {
+                // 1. Validar que la cita existe y está activa
+                var cita = await _db.Citas.FindAsync(citaId);
+
+                if (cita == null || !cita.Activo)
+                    return NotFound(new { Success = false, Message = "Cita no encontrada" });
+
+                // 2. ✅ VALIDACIÓN: La nueva fecha debe ser en el futuro
+                var ahora = DateTime.Now;
+                if (request.NuevaFechaCita <= ahora)
+                {
+                    return BadRequest(new
+                    {
+                        Success = false,
+                        Message = "La nueva fecha debe ser posterior a la fecha y hora actual"
+                    });
+                }
+
+                // 3. ✅ VALIDACIÓN ADICIONAL: No permitir reagendar para hoy si ya pasó la hora
+                if (request.NuevaFechaCita.Date == DateTime.Today &&
+                    request.NuevaFechaCita.TimeOfDay <= ahora.TimeOfDay)
+                {
+                    return BadRequest(new
+                    {
+                        Success = false,
+                        Message = "No se puede reagendar para un horario que ya pasó"
+                    });
+                }
+
+                // 4. ✅ VALIDACIÓN: Verificar que no haya conflicto de horarios
+                var horaInicio = request.NuevaFechaCita;
+                var horaFin = request.NuevaFechaCita.AddMinutes(30); // Slots de 30 minutos
+
+                var existeConflicto = await _db.Citas
+                    .Where(c => c.Activo
+                             && c.Id != citaId // Excluir la cita actual
+                             && c.FechaCita >= horaInicio
+                             && c.FechaCita < horaFin)
+                    .AnyAsync();
+
+                if (existeConflicto)
+                {
+                    return BadRequest(new
+                    {
+                        Success = false,
+                        Message = "Ya existe una cita programada en ese horario. Por favor, elija otro horario."
+                    });
+                }
+
+                // 5. Guardar fecha anterior para log y respuesta
+                var fechaAnterior = cita.FechaCita;
+
+                // 6. Actualizar la fecha de la cita
+                cita.FechaCita = request.NuevaFechaCita;
+
+                await _db.SaveChangesAsync();
+
+                _logger.LogInformation(
+                    $"Cita {citaId} reagendada de {fechaAnterior:dd/MM/yyyy HH:mm} a {request.NuevaFechaCita:dd/MM/yyyy HH:mm}");
+
+                return Ok(new
+                {
+                    Success = true,
+                    Message = "Cita reagendada exitosamente",
+                    CitaId = cita.Id,
+                    FechaAnterior = fechaAnterior,
+                    FechaNueva = request.NuevaFechaCita
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error al reagendar cita {citaId}");
+                return StatusCode(500, new
+                {
+                    Success = false,
+                    Message = "Error al reagendar la cita. Por favor, intente nuevamente."
+                });
             }
         }
 
@@ -201,12 +303,22 @@ namespace CarSlineAPI.Controllers
         {
             try
             {
-                var cita = await _db.citas.FindAsync(citaId);
+                var cita = await _db.Citas.FindAsync(citaId);
 
                 if (cita == null || !cita.Activo)
                     return NotFound(new { Success = false, Message = "Cita no encontrada" });
 
                 cita.Activo = false;
+
+                var trabajos = await _db.TrabajosPorCitas
+                    .Where(t => t.CitaId == citaId && t.Activo)
+                    .ToListAsync();
+
+                foreach (var trabajo in trabajos)
+                {
+                    trabajo.Activo = false; // Cancelado
+                }
+
                 await _db.SaveChangesAsync();
 
                 _logger.LogInformation($"Cita {citaId} cancelada");
