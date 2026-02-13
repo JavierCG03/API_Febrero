@@ -15,6 +15,8 @@
     public class RecordatorioServicioDto
     {
         public int Id { get; set; }
+        public int Clienteid { get; set; }
+        public int Vehiculoid { get; set; }
 
         // Informacion del Cliente
         public string ClienteNombre { get; set; } = string.Empty;

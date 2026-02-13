@@ -4,6 +4,7 @@ using CarSlineAPI.Models.DTOs;
 using CarSlineAPI.Models.Entities;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Org.BouncyCastle.Asn1.Ocsp;
 
 namespace CarSlineAPI.Controllers
 {
@@ -70,6 +71,14 @@ namespace CarSlineAPI.Controllers
                     await transaction.CommitAsync();
 
                     _logger.LogInformation($"Cita ID {cita.Id} creada con {request.Trabajos.Count} trabajos para fecha {cita.FechaCita:dd/MM/yyyy}");
+
+                    var recordatorio = await _db.ProximosServicios.FindAsync(request.VehiculoId);
+
+                    if (request.TipoOrdenId == 1 && recordatorio != null)
+                    {
+                        recordatorio.Activo = false;
+                    }
+                    await _db.SaveChangesAsync();
 
                     return Ok(new
                     {
@@ -171,7 +180,10 @@ namespace CarSlineAPI.Controllers
                     {
                         cita.Id,
                         cita.FechaCita,
-
+                        cita.TipoOrdenId,
+                        cita.TipoServicioId,
+                        ClienteId = cita.Cliente.Id,
+                        VehiculoId = cita.Vehiculo.Id,
                         NombreCliente = cita.Cliente?.NombreCompleto ?? "No especificado",
                         TelefonoCliente = cita.Cliente?.TelefonoMovil ?? "",
                         DireccionCliente = cita.Cliente != null
@@ -317,6 +329,15 @@ namespace CarSlineAPI.Controllers
                 foreach (var trabajo in trabajos)
                 {
                     trabajo.Activo = false; // Cancelado
+                }
+                var recordatorio = await _db.ProximosServicios.FindAsync(cita.VehiculoId);
+
+                if (cita.TipoOrdenId == 1 && recordatorio != null)
+                {
+                    recordatorio.Activo = false;
+                    recordatorio.PrimerRecordatorio = true;
+                    recordatorio.SegundoRecordatorio = true;
+                    recordatorio.TercerRecordatorio = false;
                 }
 
                 await _db.SaveChangesAsync();

@@ -332,6 +332,8 @@ namespace CarSlineAPI.Controllers
             return new RecordatorioServicioDto
             {
                 Id = ps.Id,
+                Clienteid = ps.ClienteId,
+                Vehiculoid= ps.VehiculoId,
                 ClienteNombre = ps.Cliente?.NombreCompleto ?? "",
                 Telefono = ps.Cliente?.TelefonoMovil ?? "",
                 TelefonoCasa = ps.Cliente?.TelefonoCasa ?? "",
