@@ -2,17 +2,6 @@
 
 namespace CarSlineAPI.Models.DTOs
 {
-    /// <summary>
-    /// DTO para crear un trabajo en una orden
-    /// </summary>
-    public class CrearTrabajoRequest
-    {
-        [Required(ErrorMessage = "La descripción del trabajo es requerida")]
-        [MaxLength(1000)]
-        public string Trabajo { get; set; } = string.Empty;
-
-        public int? TecnicoAsignadoId { get; set; }
-    }
 
     /// <summary>
     /// DTO para actualizar estado de trabajo
@@ -175,6 +164,13 @@ namespace CarSlineAPI.Models.DTOs
     /// <summary>
     /// Response genérico para trabajos
     /// </summary>
+    /// 
+    public class CrearTrabajoResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+
+    }
     public class TrabajoResponse
     {
         public bool Success { get; set; }

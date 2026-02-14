@@ -6,6 +6,7 @@ using CarSlineAPI.Models.DTOs;
 using CarSlineAPI.Models.Entities;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Org.BouncyCastle.Asn1.Ocsp;
 
 namespace CarSlineAPI.Controllers
 {
@@ -145,8 +146,8 @@ namespace CarSlineAPI.Controllers
         /// POST api/Trabajos/agregar
         /// </summary>
         [HttpPost("agregar/{ordenId}")]
-        [ProducesResponseType(typeof(TrabajoResponse), StatusCodes.Status200OK)]
-        public async Task<IActionResult> AgregarTrabajo(int ordenId, [FromBody] CrearTrabajoRequest request)
+        [ProducesResponseType(typeof(CrearTrabajoResponse), StatusCodes.Status200OK)]
+        public async Task<IActionResult> AgregarTrabajo(int ordenId, [FromBody] TrabajoCrearDto request)
         {
             if (!ModelState.IsValid)
                 return BadRequest(new TrabajoResponse
@@ -158,6 +159,7 @@ namespace CarSlineAPI.Controllers
             try
             {
                 var orden = await _db.OrdenesGenerales.FindAsync(ordenId);
+
                 if (orden == null || !orden.Activo)
                     return NotFound(new TrabajoResponse
                     {
@@ -165,52 +167,44 @@ namespace CarSlineAPI.Controllers
                         Message = "Orden no encontrada"
                     });
 
+                if (orden.EstadoOrdenId != 1 )
+                {
+                    orden.EstadoOrdenId = 2;
+                }
+                orden.TotalTrabajos = orden.TotalTrabajos + 1;
+
+
                 var trabajo = new TrabajoPorOrden
                 {
                     OrdenGeneralId = ordenId,
                     Trabajo = request.Trabajo,
-                    TecnicoAsignadoId = request.TecnicoAsignadoId,
-                    FechaHoraAsignacionTecnico = request.TecnicoAsignadoId.HasValue ? DateTime.Now : null,
-                    EstadoTrabajo = 1, // Pendiente
+                    IndicacionesTrabajo = string.IsNullOrWhiteSpace(request.Indicaciones) ? null : request.Indicaciones,
+                    EstadoTrabajo = 1,
                     Activo = true,
                     FechaCreacion = DateTime.Now
                 };
 
                 _db.Set<TrabajoPorOrden>().Add(trabajo);
+
+
                 await _db.SaveChangesAsync();
 
-                // Recargar con relaciones
-                await _db.Entry(trabajo)
-                    .Reference(t => t.TecnicoAsignado)
-                    .LoadAsync();
                 await _db.Entry(trabajo)
                     .Reference(t => t.EstadoTrabajoNavegacion)
                     .LoadAsync();
 
                 _logger.LogInformation($"Trabajo agregado a orden {ordenId}");
 
-                return Ok(new TrabajoResponse
+                return Ok(new CrearTrabajoResponse
                 {
                     Success = true,
                     Message = "Trabajo agregado exitosamente",
-                    Trabajo = new TrabajoDto
-                    {
-                        Id = trabajo.Id,
-                        OrdenGeneralId = trabajo.OrdenGeneralId,
-                        Trabajo = trabajo.Trabajo,
-                        TecnicoAsignadoId = trabajo.TecnicoAsignadoId,
-                        TecnicoNombre = trabajo.TecnicoAsignado?.NombreCompleto,
-                        EstadoTrabajo = trabajo.EstadoTrabajo,
-                        EstadoTrabajoNombre = trabajo.EstadoTrabajoNavegacion?.NombreEstado,
-                        ColorEstado = trabajo.EstadoTrabajoNavegacion?.Color,
-                        FechaCreacion = trabajo.FechaCreacion
-                    }
                 });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al agregar trabajo");
-                return StatusCode(500, new TrabajoResponse
+                return StatusCode(500, new CrearTrabajoResponse
                 {
                     Success = false,
                     Message = "Error al agregar trabajo"
@@ -222,7 +216,6 @@ namespace CarSlineAPI.Controllers
         /// Asignar técnico a un trabajo
         /// PUT api/Trabajos/asignar-tecnico
         /// </summary>
-        // En tu TrabajosController.cs
 
         [HttpPut("{trabajoId}/asignar-tecnico/{tecnicoId}")]
         [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
@@ -909,6 +902,90 @@ namespace CarSlineAPI.Controllers
                 {
                     Success = false,
                     Message = "Error al completar trabajo"
+                });
+            }
+        }
+        /// <summary>
+        /// Eliminar trabajo de una orden existente
+        /// DELETE api/Trabajos/eliminar/{trabajoId}
+        /// </summary>
+        [HttpDelete("eliminar/{trabajoId}")]
+        [ProducesResponseType(typeof(TrabajoResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> EliminarTrabajo(int trabajoId)
+        {
+            try
+            {
+                // Buscar el trabajo
+                var trabajo = await _db.Set<TrabajoPorOrden>()
+                    .Include(t => t.OrdenGeneral)
+                    .FirstOrDefaultAsync(t => t.Id == trabajoId && t.Activo);
+
+                if (trabajo == null)
+                {
+                    return NotFound(new TrabajoResponse
+                    {
+                        Success = false,
+                        Message = "Trabajo no encontrado"
+                    });
+                }
+
+                // Validar que el estado del trabajo sea menor a 3 (Pendiente o Asignado)
+                if (trabajo.EstadoTrabajo >= 3)
+                {
+                    return BadRequest(new TrabajoResponse
+                    {
+                        Success = false,
+                        Message = "No se puede eliminar un trabajo que ya está en proceso, completado, pausado o cancelado"
+                    });
+                }
+
+                // Contar trabajos activos de la misma orden (excluyendo el actual)
+                var totalTrabajosOrden = await _db.Set<TrabajoPorOrden>()
+                    .Where(t => t.OrdenGeneralId == trabajo.OrdenGeneralId
+                             && t.Activo
+                             && t.Id != trabajoId)
+                    .CountAsync();
+
+                // Validar que no sea el único trabajo de la orden
+                if (totalTrabajosOrden == 0)
+                {
+                    return BadRequest(new TrabajoResponse
+                    {
+                        Success = false,
+                        Message = "No se puede eliminar el único trabajo de la orden, procede a eliminar "
+                    });
+                }
+
+                // Cambiar estado a 6 (Cancelado) en lugar de eliminación física
+                trabajo.EstadoTrabajo = 6;
+                trabajo.Activo = false; // Marcar como inactivo
+
+                // Actualizar el total de trabajos de la orden
+                var orden = trabajo.OrdenGeneral;
+                if (orden != null)
+                {
+                    orden.TotalTrabajos = orden.TotalTrabajos - 1;
+                }
+
+                await _db.SaveChangesAsync();
+
+                _logger.LogInformation($"Trabajo {trabajoId} eliminado (estado 6) de la orden {trabajo.OrdenGeneralId}");
+
+                return Ok(new TrabajoResponse
+                {
+                    Success = true,
+                    Message = "Trabajo eliminado exitosamente"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error al eliminar trabajo {trabajoId}");
+                return StatusCode(500, new TrabajoResponse
+                {
+                    Success = false,
+                    Message = "Error al eliminar trabajo"
                 });
             }
         }

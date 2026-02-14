@@ -334,7 +334,7 @@ namespace CarSlineAPI.Controllers
 
                 if (cita.TipoOrdenId == 1 && recordatorio != null)
                 {
-                    recordatorio.Activo = false;
+                    recordatorio.Activo = true;
                     recordatorio.PrimerRecordatorio = true;
                     recordatorio.SegundoRecordatorio = true;
                     recordatorio.TercerRecordatorio = false;

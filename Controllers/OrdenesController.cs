@@ -22,10 +22,7 @@ namespace CarSlineAPI.Controllers
             _db = db;
             _logger = logger;
         }
-        /// <summary>
-        /// ✅ NUEVO: Crear orden con lista de trabajos
-        /// POST api/Ordenes/crear-con-trabajos
-        /// </summary>     
+
         [HttpPost("crear-con-trabajos")]
         public async Task<IActionResult> CrearOrdenConTrabajos(
             [FromBody] CrearOrdenConTrabajosRequest request,
@@ -155,7 +152,7 @@ namespace CarSlineAPI.Controllers
                     .Include(o => o.Trabajos.Where(t => t.Activo))
                         .ThenInclude(t => t.TecnicoAsignado)
                     .Where(o => o.TipoOrdenId == tipoOrdenId
-                             && o.AsesorId == asesorId
+                             //&& o.AsesorId == asesorId
                              && o.Activo
                              && new[] { 1, 2, 3 }.Contains(o.EstadoOrdenId))
                     .OrderBy(o => o.FechaHoraPromesaEntrega)
@@ -273,9 +270,7 @@ namespace CarSlineAPI.Controllers
                     .Include(t => t.TecnicoAsignado)
                     .Include(t => t.EstadoTrabajoNavegacion)
                     .Where(t => t.Activo && (
-                        // Estados 2, 3, 5 sin filtro adicional
                         new[] { 2, 3, 5 }.Contains(t.EstadoTrabajo) ||
-                        // Estado 4 (Completado) solo de la fecha especificada
                         (t.EstadoTrabajo == 4 &&
                          t.FechaHoraTermino.HasValue &&
                          t.FechaHoraTermino.Value >= fechaFiltro &&
