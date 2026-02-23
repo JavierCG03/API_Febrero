@@ -201,17 +201,20 @@ namespace CarSlineAPI.Controllers
         /// DELETE api/RefaccionesTrabajo/{refaccionId}
         /// </summary>
         [HttpDelete("{refaccionId}")]
-        [ProducesResponseType(typeof(AgregarRefaccionesResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> EliminarRefaccion(int refaccionId)
         {
             try
             {
-                var refaccion = await _db.Set<Refacciontrabajo>()
-                    .Include(r => r.TrabajoPorOrden)
-                    .FirstOrDefaultAsync(r => r.Id == refaccionId);
+                var data = await _db.Set<Refacciontrabajo>()
+                    .Where(r => r.Id == refaccionId)
+                    .Select(r => new
+                    {
+                        Refaccion = r,
+                        EstadoOrdenId = r.TrabajoPorOrden.OrdenGeneral.EstadoOrdenId
+                    })
+                    .FirstOrDefaultAsync();
 
-                if (refaccion == null)
+                if (data == null)
                 {
                     return NotFound(new AgregarRefaccionesResponse
                     {
@@ -220,23 +223,17 @@ namespace CarSlineAPI.Controllers
                     });
                 }
 
-                // Verificar que el trabajo no esté completado
-                if (refaccion.TrabajoPorOrden?.EstadoTrabajo == 4)
+                if (data.EstadoOrdenId == 4)
                 {
                     return BadRequest(new AgregarRefaccionesResponse
                     {
                         Success = false,
-                        Message = "No se pueden eliminar refacciones de un trabajo completado"
+                        Message = "No se pueden eliminar refacciones de una orden entregada"
                     });
                 }
 
-                var trabajoId = refaccion.TrabajoId;
-                var ordenId = refaccion.OrdenGeneralId;
-
-                _db.Set<Refacciontrabajo>().Remove(refaccion);
+                _db.Remove(data.Refaccion);
                 await _db.SaveChangesAsync();
-
-                _logger.LogInformation($"Refacción {refaccionId} eliminada del trabajo {trabajoId}. Los totales se actualizaron automáticamente vía trigger.");
 
                 return Ok(new AgregarRefaccionesResponse
                 {
@@ -247,6 +244,7 @@ namespace CarSlineAPI.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Error al eliminar refacción {refaccionId}");
+
                 return StatusCode(500, new AgregarRefaccionesResponse
                 {
                     Success = false,
