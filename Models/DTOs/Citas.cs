@@ -44,4 +44,42 @@ namespace CarSlineAPI.Models.DTOs
         public DateTime FechaAnterior { get; set; }
         public DateTime FechaNueva { get; set; }
     }
+
+    /// <summary>
+    /// DTO completo de orden con trabajos
+    /// </summary>
+    public class CitaConTrabajosDto
+    {
+        public int Id { get; set; }
+        public int TipoOrdenId { get; set; }
+        public int VehiculoId { get; set; }
+        public string VehiculoCompleto{ get; set; } = string.Empty;
+        public string VIN { get; set; } = string.Empty;
+        public DateTime FechaCita { get; set; }
+
+        // Lista de trabajos
+        public List<TrabajoCitaDto> Trabajos { get; set; } = new();
+    }
+
+    public class TrabajoCitaDto
+    {
+        public int Id { get; set; }
+        public string Trabajo { get; set; } = string.Empty;
+        public string? IndicacionesTrabajo { get; set; }
+        public bool RefaccionesListas { get; set; }
+
+    }
+    public class RefaccionTrabajoCitaDto
+    {
+        public int Id { get; set; }
+        public int TrabajoCitaId { get; set; }
+        public int TrabajoOrdenId { get; set; }
+        public string Refaccion { get; set; } = string.Empty;
+        public int Cantidad { get; set; }
+        public decimal Precio { get; set; }
+        public decimal PrecioVenta { get; set; }
+        public decimal Total { get; set; }
+        public bool Activo { get; set; }
+        public DateTime FechaCompra { get; set; }
+    }
 }

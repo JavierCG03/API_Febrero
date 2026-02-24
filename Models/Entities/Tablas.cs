@@ -707,6 +707,7 @@ namespace CarSlineAPI.Models.Entities
         public bool Activo { get; set; } = true;
 
         // relaciones
+        public virtual ICollection<TrabajoPorCita> Trabajos { get; set; } = new List<TrabajoPorCita>();
         public virtual Cliente Cliente { get; set; }
         public virtual Vehiculo Vehiculo { get; set; }
         public virtual Usuario EncargadoCitas { get; set; }
