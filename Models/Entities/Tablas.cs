@@ -731,6 +731,7 @@ namespace CarSlineAPI.Models.Entities
         public string? IndicacionesTrabajo { get; set; }
 
         public bool Activo { get; set; } = true;
+        public bool RefaccionesListas { get; set; } = false;
 
         // Navegación
         [ForeignKey("CitaId")]
@@ -767,7 +768,6 @@ namespace CarSlineAPI.Models.Entities
 
         // false = pendiente de transferir, true = ya fue pasada a refaccionestrabajo
         public bool Activo { get; set; } = false;
-
         // Navegación
         [ForeignKey("TrabajoCitaId")]
         public virtual TrabajoPorCita? TrabajoPorCita { get; set; }

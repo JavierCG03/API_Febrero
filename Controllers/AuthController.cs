@@ -118,6 +118,7 @@ namespace CarSlineAPI.Controllers
         /// </summary>
         /// <param name="adminId">ID del administrador</param>
         /// <returns>Lista de usuarios</returns>
+        
         [HttpGet("usuarios")]
         [ProducesResponseType(typeof(List<UsuarioDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
