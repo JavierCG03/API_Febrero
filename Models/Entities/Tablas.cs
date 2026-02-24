@@ -736,6 +736,45 @@ namespace CarSlineAPI.Models.Entities
         [ForeignKey("CitaId")]
         public virtual Cita? Cita { get; set; }
     }
+
+    [Table("refaccionesporcita")]
+    public class RefaccionPorCita
+    {
+        [Key]
+        public int Id { get; set; }
+
+        [Required]
+        public int TrabajoCitaId { get; set; }
+
+        [Required]
+        [MaxLength(255)]
+        public string Refaccion { get; set; } = string.Empty;
+
+        [Required]
+        public int Cantidad { get; set; } = 1;
+
+        [Required]
+        [Column(TypeName = "DECIMAL(10,2)")]
+        public decimal Precio { get; set; }
+
+        public DateTime FechaCompra { get; set; } = DateTime.Now;
+
+        // Se llena al convertir la cita en orden
+        public int? TrabajoOrdenId { get; set; }
+
+        [Column(TypeName = "DECIMAL(10,2)")]
+        public decimal? PrecioVenta { get; set; }
+
+        // false = pendiente de transferir, true = ya fue pasada a refaccionestrabajo
+        public bool Activo { get; set; } = false;
+
+        // Navegación
+        [ForeignKey("TrabajoCitaId")]
+        public virtual TrabajoPorCita? TrabajoPorCita { get; set; }
+
+        [ForeignKey("TrabajoOrdenId")]
+        public virtual TrabajoPorOrden? TrabajoPorOrden { get; set; }
+    }
 }
 
 

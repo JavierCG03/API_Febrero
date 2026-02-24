@@ -72,7 +72,7 @@ namespace CarSlineAPI.Controllers
 
                     _logger.LogInformation($"Cita ID {cita.Id} creada con {request.Trabajos.Count} trabajos para fecha {cita.FechaCita:dd/MM/yyyy}");
 
-                    var recordatorio = await _db.ProximosServicios.FindAsync(request.VehiculoId);
+                    var recordatorio = await _db.ProximosServicios.SingleOrDefaultAsync(ps => ps.VehiculoId == request.VehiculoId);
 
                     if (request.TipoOrdenId == 1 && recordatorio != null)
                     {
@@ -84,7 +84,7 @@ namespace CarSlineAPI.Controllers
                     {
                         Success = true,
                         CitaId = cita.Id,
-                        FechaCita = cita.FechaCita,
+                        cita.FechaCita,
                         TotalTrabajos = request.Trabajos.Count,
                         Message = "Cita creada exitosamente"
                     });

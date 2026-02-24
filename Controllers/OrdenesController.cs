@@ -487,6 +487,7 @@ namespace CarSlineAPI.Controllers
                     return;
                 }
 
+
                 // Validar que tenga TipoServicioId
                 if (!orden.TipoServicioId.HasValue)
                 {

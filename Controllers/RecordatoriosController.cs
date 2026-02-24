@@ -1,5 +1,6 @@
 ﻿using CarSlineAPI.Data;
 using CarSlineAPI.Models.DTOs;
+using CarSlineAPI.Models.Entities;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,6 +18,7 @@ namespace CarSlineAPI.Controllers
             _db = db;
             _logger = logger;
         }
+
 
         /// <summary>
         /// Obtener recordatorios por tipo (1 = Primero, 2 = Segundo, 3 = Tercero)

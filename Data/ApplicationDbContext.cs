@@ -32,6 +32,7 @@ namespace CarSlineAPI.Data
         public DbSet<ProximoServicio> ProximosServicios { get; set; }   
         public DbSet<Cita> Citas { get; set; }
         public DbSet<TrabajoPorCita> TrabajosPorCitas { get; set; }
+        public DbSet<RefaccionPorCita> Refaccionesporcita { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
