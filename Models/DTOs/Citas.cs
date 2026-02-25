@@ -82,4 +82,28 @@ namespace CarSlineAPI.Models.DTOs
         public bool Activo { get; set; }
         public DateTime FechaCompra { get; set; }
     }
+
+    public class AgregarRefaccionCitaRequest
+    {
+        [Required(ErrorMessage = "El ID del trabajo es requerido")]
+        public int CitaTrabajoId { get; set; }
+
+        [Required(ErrorMessage = "El nombre de la refacción es requerido")]
+        [MaxLength(255)]
+        public string Refaccion { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "La cantidad es requerida")]
+        [Range(1, int.MaxValue, ErrorMessage = "La cantidad debe ser mayor a 0")]
+        public int Cantidad { get; set; }
+
+        [Required(ErrorMessage = "El precio unitario es requerido")]
+        [Range(0.01, double.MaxValue, ErrorMessage = "El precio debe ser mayor a 0")]
+        public decimal PrecioUnitario { get; set; }
+    }
+    public class AgregarRefaccionCitaResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+    }
+
 }

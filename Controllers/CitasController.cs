@@ -142,6 +142,7 @@ namespace CarSlineAPI.Controllers
                 return StatusCode(500, new { Success = false, Message = "Error al obtener citas" });
             }
         }
+
         [HttpPost("agregar")]
         [ProducesResponseType(typeof(AgregarRefaccionesResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -257,7 +258,9 @@ namespace CarSlineAPI.Controllers
         }
 
         [HttpGet("Trabajos-Citas")]
-        public async Task<IActionResult> ObtenerTrabajosCitasPorFecha([FromQuery] DateTime? fecha = null)
+        public async Task<IActionResult> ObtenerTrabajosCitasPorFecha(
+        [FromQuery] int tipoOrdenId,           // obligatorio
+        [FromQuery] DateTime? fecha = null)   // // opcional, default mañana
         {
             try
             {
@@ -267,7 +270,7 @@ namespace CarSlineAPI.Controllers
                 var citas = await _db.Citas
                     .Include(o => o.Vehiculo)
                     .Include(o => o.Trabajos.Where(t => t.Activo))
-                    .Where(o => (o.TipoOrdenId == 1 || o.TipoOrdenId == 2)
+                    .Where(o => o.TipoOrdenId == tipoOrdenId 
                              && o.Activo 
                              && o.FechaCita >= fechaConsulta
                              && o.FechaCita < fechaSiguiente)
@@ -277,7 +280,7 @@ namespace CarSlineAPI.Controllers
                         Id = o.Id,
                         TipoOrdenId = o.TipoOrdenId,
                         VehiculoId= o.VehiculoId,
-                        VehiculoCompleto = $"{o.Vehiculo.Marca} {o.Vehiculo.Modelo} {o.Vehiculo.Version}/ {o.Vehiculo.Anio}",
+                        VehiculoCompleto = $"{o.Vehiculo.Marca}  {o.Vehiculo.Modelo} {o.Vehiculo.Version} / {o.Vehiculo.Anio}",
                         VIN = o.Vehiculo.VIN,
                         FechaCita = o.FechaCita,
                         Trabajos = o.Trabajos
