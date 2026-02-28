@@ -315,6 +315,8 @@ namespace CarSlineAPI.Models.Entities
         [Required]
         public int OrdenGeneralId { get; set; }
 
+        public int? TrabajoCitaId { get; set; }
+
         [Required]
         [Column(TypeName = "TEXT")]
         public string Trabajo { get; set; } = string.Empty;
@@ -346,6 +348,7 @@ namespace CarSlineAPI.Models.Entities
         [Column(TypeName = "DECIMAL(10,2)")]
         [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
         public decimal? CostoTotal { get; set; }
+        public bool RefaccionesListas { get; set; } = false;
 
         public bool Activo { get; set; } = true;
         public DateTime FechaCreacion { get; set; } = DateTime.Now;
@@ -353,6 +356,9 @@ namespace CarSlineAPI.Models.Entities
         // Navegación
         [ForeignKey("OrdenGeneralId")]
         public virtual OrdenGeneral? OrdenGeneral { get; set; }
+
+        [ForeignKey("TrabajoCitaId")]
+        public virtual TrabajoPorCita? TrabajoPorCita{ get; set; }
 
         [ForeignKey("TecnicoAsignadoId")]
         public virtual Usuario? TecnicoAsignado { get; set; }
@@ -739,14 +745,14 @@ namespace CarSlineAPI.Models.Entities
         public virtual Cita? Cita { get; set; }
     }
 
-    [Table("refaccionesporcita")]
-    public class RefaccionPorCita
+    [Table("refaccionescompradas")]
+    public class RefaccionComprada
     {
         [Key]
         public int Id { get; set; }
 
-        [Required]
-        public int TrabajoCitaId { get; set; }
+        // ── Nullable: NULL cuando la refacción es de una orden sin cita ──
+        public int? TrabajoCitaId { get; set; }
 
         [Required]
         [MaxLength(255)]
@@ -755,21 +761,22 @@ namespace CarSlineAPI.Models.Entities
         [Required]
         public int Cantidad { get; set; } = 1;
 
+        // ── Renombrado de Precio → PrecioCompra ──
         [Required]
-        [Column(TypeName = "DECIMAL(10,2)")]
+        [Column("Precio", TypeName = "DECIMAL(10,2)")]
         public decimal Precio { get; set; }
-
-        public DateTime FechaCompra { get; set; } = DateTime.Now;
-
-        // Se llena al convertir la cita en orden
-        public int? TrabajoOrdenId { get; set; }
 
         [Column(TypeName = "DECIMAL(10,2)")]
         public decimal? PrecioVenta { get; set; }
 
-        // false = pendiente de transferir, true = ya fue pasada a refaccionestrabajo
-        public bool Activo { get; set; } = false;
-        // Navegación
+        public DateTime FechaCompra { get; set; } = DateTime.Now;
+
+        // ── Se llena al convertir la cita en orden ──
+        public int? TrabajoOrdenId { get; set; }
+
+        public bool Activo { get; set; } = true;
+
+        // ── Navegación ──
         [ForeignKey("TrabajoCitaId")]
         public virtual TrabajoPorCita? TrabajoPorCita { get; set; }
 

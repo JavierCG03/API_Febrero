@@ -3,17 +3,18 @@ using CarSlineAPI.Models.DTOs;
 using CarSlineAPI.Models.Entities;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Org.BouncyCastle.Asn1.Ocsp;
 
 namespace CarSlineAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class RefaccionesCitaController : ControllerBase
+    public class RefaccionesCompradasController : ControllerBase
     {
         private readonly ApplicationDbContext _db;
-        private readonly ILogger<RefaccionesCitaController> _logger;
+        private readonly ILogger<RefaccionesCompradasController> _logger;
 
-        public RefaccionesCitaController(ApplicationDbContext db, ILogger<RefaccionesCitaController> logger)
+        public RefaccionesCompradasController(ApplicationDbContext db, ILogger<RefaccionesCompradasController> logger)
         {
             _db = db;
             _logger = logger;
@@ -23,72 +24,66 @@ namespace CarSlineAPI.Controllers
         // AGREGAR REFACCIONES
         // ============================================
 
-        /// <summary>
-        /// Agregar refacciones a un trabajo de cita
-        /// POST api/RefaccionesCita/agregar
-        /// </summary>
         [HttpPost("agregar")]
-        [ProducesResponseType(typeof(AgregarRefaccionesCitaResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> AgregarRefacciones([FromBody] AgregarRefaccionesCitaRequest request)
+        public async Task<IActionResult> AgregarRefacciones([FromBody] AgregarRefaccionesRequest request)
         {
             if (!ModelState.IsValid)
-            {
                 return BadRequest(new AgregarRefaccionesCitaResponse
                 {
                     Success = false,
                     Message = "Datos inválidos"
                 });
-            }
-
             try
             {
-                // Verificar que el trabajo de cita existe y está activo
-                var trabajoCita = await _db.TrabajosPorCitas
-                    .Include(t => t.Cita)
-                    .FirstOrDefaultAsync(t => t.Id == request.TrabajoCitaId && t.Activo);
-
-                if (trabajoCita == null)
+                // Verificar que el trabajo existe según el origen
+                if (!request.Orden)
                 {
-                    return NotFound(new AgregarRefaccionesCitaResponse
-                    {
-                        Success = false,
-                        Message = "Trabajo de cita no encontrado"
-                    });
+                    var trabajoCita = await _db.TrabajosPorCitas
+                        .FirstOrDefaultAsync(t => t.Id == request.TrabajoId && t.Activo);
+
+                    if (trabajoCita == null)
+                        return NotFound(new AgregarRefaccionesCitaResponse
+                        {
+                            Success = false,
+                            Message = "Trabajo de cita no encontrado"
+                        });
+                }
+                else
+                {
+                    var trabajoOrden = await _db.TrabajosPorOrden
+                        .FirstOrDefaultAsync(t => t.Id == request.TrabajoId && t.Activo);
+
+                    if (trabajoOrden == null)
+                        return NotFound(new AgregarRefaccionesCitaResponse
+                        {
+                            Success = false,
+                            Message = "Trabajo de orden no encontrado"
+                        });
                 }
 
-                // Verificar que la cita siga activa
-                if (trabajoCita.Cita == null || !trabajoCita.Cita.Activo)
-                {
-                    return BadRequest(new AgregarRefaccionesCitaResponse
-                    {
-                        Success = false,
-                        Message = "No se pueden agregar refacciones a una cita cancelada"
-                    });
-                }
-
-                var refaccionesAgregadas = new List<RefaccionPorCitaDto>();
+                var refaccionesAgregadas = new List<RefaccionCompradaDto>();
 
                 foreach (var dto in request.Refacciones)
                 {
-                    var refaccion = new RefaccionPorCita
+                    var refaccion = new RefaccionComprada
                     {
-                        TrabajoCitaId = request.TrabajoCitaId,
+                        // Colocar el Id en la columna correcta según el origen
+                        TrabajoCitaId = !request.Orden ? request.TrabajoId : null,
+                        TrabajoOrdenId = request.Orden ? request.TrabajoId : null,
                         Refaccion = dto.Refaccion,
                         Cantidad = dto.Cantidad,
                         Precio = dto.Precio,
                         PrecioVenta = dto.PrecioVenta,
                         FechaCompra = DateTime.Now,
-                        TrabajoOrdenId = null,
-                        Activo = false  // false = pendiente de transferir a orden
+                        Activo = false
                     };
 
-                    _db.Refaccionesporcita.Add(refaccion);
+                    _db.RefaccionesCompradas.Add(refaccion);
 
-                    refaccionesAgregadas.Add(new RefaccionPorCitaDto
+                    refaccionesAgregadas.Add(new RefaccionCompradaDto
                     {
                         TrabajoCitaId = refaccion.TrabajoCitaId,
+                        TrabajoOrdenId = refaccion.TrabajoOrdenId,
                         Refaccion = refaccion.Refaccion,
                         Cantidad = refaccion.Cantidad,
                         Precio = refaccion.Precio,
@@ -98,14 +93,13 @@ namespace CarSlineAPI.Controllers
                     });
                 }
 
-                // Marcar el trabajo de cita con refacciones listas
-                //trabajoCita.RefaccionesListas = true;
-
                 await _db.SaveChangesAsync();
 
-                // Recuperar IDs generados
-                var guardadas = await _db.Refaccionesporcita
-                    .Where(r => r.TrabajoCitaId == request.TrabajoCitaId)
+                // Recuperar IDs generados filtrando por la columna correcta
+                var guardadas = await _db.RefaccionesCompradas
+                    .Where(r => request.Orden
+                        ? r.TrabajoOrdenId == request.TrabajoId
+                        : r.TrabajoCitaId == request.TrabajoId)
                     .OrderByDescending(r => r.Id)
                     .Take(request.Refacciones.Count)
                     .ToListAsync();
@@ -116,7 +110,7 @@ namespace CarSlineAPI.Controllers
                 var totalCosto = refaccionesAgregadas.Sum(r => r.TotalCosto);
 
                 _logger.LogInformation(
-                    $"Se agregaron {refaccionesAgregadas.Count} refacciones al trabajo de cita {request.TrabajoCitaId}");
+                    $"Se agregaron {refaccionesAgregadas.Count} refacciones al trabajo {request.TrabajoId} (orden={request.Orden})");
 
                 return Ok(new AgregarRefaccionesCitaResponse
                 {
@@ -129,7 +123,7 @@ namespace CarSlineAPI.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error al agregar refacciones al trabajo de cita {request.TrabajoCitaId}");
+                _logger.LogError(ex, $"Error al agregar refacciones al trabajo {request.TrabajoId}");
                 return StatusCode(500, new AgregarRefaccionesCitaResponse
                 {
                     Success = false,
@@ -138,50 +132,52 @@ namespace CarSlineAPI.Controllers
             }
         }
 
-
         // ============================================
         // MARCAR REFACCIONES COMO LISTAS
         // ============================================
 
-        /// <summary>
-        /// Marcar un trabajo de cita como con refacciones listas
-        /// PUT api/RefaccionesCita/{trabajoCitaId}/marcar-listas
-        /// </summary>
-        [HttpPut("{trabajoCitaId}/marcar-listas")]
+        [HttpPut("{trabajoId}/marcar-listas")]
         [ProducesResponseType(typeof(EliminarRefaccionCitaResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> MarcarRefaccionesListas(int trabajoCitaId)
+        public async Task<IActionResult> MarcarRefaccionesListas(
+            int trabajoId,
+            [FromQuery] bool orden = false)
         {
             try
             {
-                var trabajoCita = await _db.TrabajosPorCitas
-                    .Include(t => t.Cita)
-                    .FirstOrDefaultAsync(t => t.Id == trabajoCitaId && t.Activo);
-
-                if (trabajoCita == null)
+                if (!orden)
                 {
-                    return NotFound(new EliminarRefaccionCitaResponse
-                    {
-                        Success = false,
-                        Message = "Trabajo de cita no encontrado"
-                    });
-                }
+                    var trabajoCita = await _db.TrabajosPorCitas
+                        .FirstOrDefaultAsync(t => t.Id == trabajoId && t.Activo);
 
-                if (trabajoCita.Cita == null || !trabajoCita.Cita.Activo)
+                    if (trabajoCita == null)
+                        return NotFound(new EliminarRefaccionCitaResponse
+                        {
+                            Success = false,
+                            Message = "Trabajo de cita no encontrado o inactivo"
+                        });
+
+                    trabajoCita.RefaccionesListas = true;
+                }
+                else
                 {
-                    return BadRequest(new EliminarRefaccionCitaResponse
-                    {
-                        Success = false,
-                        Message = "No se puede modificar una cita cancelada"
-                    });
-                }
+                    var trabajoOrden = await _db.TrabajosPorOrden
+                        .FirstOrDefaultAsync(t => t.Id == trabajoId && t.Activo);
 
-                trabajoCita.RefaccionesListas = true;
+                    if (trabajoOrden == null)
+                        return NotFound(new EliminarRefaccionCitaResponse
+                        {
+                            Success = false,
+                            Message = "Trabajo de orden no encontrado o inactivo"
+                        });
+
+                    trabajoOrden.RefaccionesListas = true;
+                }
 
                 await _db.SaveChangesAsync();
 
                 _logger.LogInformation(
-                    $"Trabajo de cita {trabajoCitaId} marcado como refacciones listas");
+                    $"Trabajo {trabajoId} (orden={orden}) marcado como refacciones listas");
 
                 return Ok(new EliminarRefaccionCitaResponse
                 {
@@ -191,9 +187,7 @@ namespace CarSlineAPI.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex,
-                    $"Error al marcar refacciones listas del trabajo {trabajoCitaId}");
-
+                _logger.LogError(ex, $"Error al marcar refacciones listas del trabajo {trabajoId}");
                 return StatusCode(500, new EliminarRefaccionCitaResponse
                 {
                     Success = false,
@@ -205,43 +199,63 @@ namespace CarSlineAPI.Controllers
         // OBTENER REFACCIONES
         // ============================================
 
-        /// <summary>
-        /// Obtener todas las refacciones de un trabajo de cita
-        /// GET api/RefaccionesCita/trabajo/{trabajoCitaId}
-        /// </summary>
-        [HttpGet("trabajo/{trabajoCitaId}")]
-        [ProducesResponseType(typeof(ObtenerRefaccionesCitaResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> ObtenerRefaccionesPorTrabajoCita(int trabajoCitaId)
+        /// GET api/RefaccionesCita/trabajo/{trabajoId}?orden=false  → filtra por TrabajoCitaId
+        /// GET api/RefaccionesCita/trabajo/{trabajoId}?orden=true   → filtra por TrabajoOrdenId
+        [HttpGet("trabajo/{trabajoId}")]
+        public async Task<IActionResult> ObtenerRefaccionesPorTrabajo(int trabajoId, [FromQuery] bool orden = false)
         {
             try
             {
-                var trabajoCita = await _db.TrabajosPorCitas
-                    .FirstOrDefaultAsync(t => t.Id == trabajoCitaId);
+                string trabajoNombre;
+                bool refaccionesListas;
 
-                if (trabajoCita == null)
+                if (!orden)
                 {
-                    return NotFound(new ObtenerRefaccionesCitaResponse
-                    {
-                        Success = false,
-                        Message = "Trabajo de cita no encontrado"
-                    });
+                    var trabajoCita = await _db.TrabajosPorCitas
+                        .FirstOrDefaultAsync(t => t.Id == trabajoId && t.Activo);
+
+                    if (trabajoCita == null)
+                        return NotFound(new ObtenerRefaccionesCitaResponse
+                        {
+                            Success = false,
+                            Message = "Trabajo de cita no encontrado"
+                        });
+
+                    trabajoNombre = trabajoCita.Trabajo;
+                    refaccionesListas = trabajoCita.RefaccionesListas;
+                }
+                else
+                {
+                    var trabajoOrden = await _db.TrabajosPorOrden
+                        .FirstOrDefaultAsync(t => t.Id == trabajoId && t.Activo);
+
+                    if (trabajoOrden == null)
+                        return NotFound(new ObtenerRefaccionesCitaResponse
+                        {
+                            Success = false,
+                            Message = "Trabajo de orden no encontrado"
+                        });
+
+                    trabajoNombre = trabajoOrden.Trabajo;
+                    refaccionesListas = trabajoOrden.RefaccionesListas;
                 }
 
-                var refacciones = await _db.Refaccionesporcita
-                    .Where(r => r.TrabajoCitaId == trabajoCitaId)
+                var refacciones = await _db.RefaccionesCompradas
+                    .Where(r => orden
+                        ? r.TrabajoOrdenId == trabajoId
+                        : r.TrabajoCitaId == trabajoId)
                     .OrderBy(r => r.Id)
-                    .Select(r => new RefaccionPorCitaDto
+                    .Select(r => new RefaccionCompradaDto
                     {
                         Id = r.Id,
                         TrabajoCitaId = r.TrabajoCitaId,
+                        TrabajoOrdenId = r.TrabajoOrdenId,
                         Refaccion = r.Refaccion,
                         Cantidad = r.Cantidad,
                         Precio = r.Precio,
                         PrecioVenta = r.PrecioVenta,
                         FechaCompra = r.FechaCompra,
-                        Transferida = r.Activo,        // Activo=true significa ya transferida a orden
-                        TrabajoOrdenId = r.TrabajoOrdenId
+                        Transferida = r.Activo
                     })
                     .ToListAsync();
 
@@ -256,17 +270,19 @@ namespace CarSlineAPI.Controllers
                     Message = refacciones.Any()
                         ? $"Se encontraron {refacciones.Count} refacción(es)"
                         : "No hay refacciones registradas",
-                    TrabajoCitaId = trabajoCitaId,
-                    TrabajoCitaNombre = trabajoCita.Trabajo,
+                    TrabajoId = trabajoId,
+                    TrabajoNombre = trabajoNombre,
                     Refacciones = refacciones,
                     TotalCosto = totalCosto,
                     TotalVenta = totalVenta,
-                    RefaccionesListas = trabajoCita.RefaccionesListas
+                    RefaccionesListas = refaccionesListas
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error al obtener refacciones del trabajo de cita {trabajoCitaId}");
+                _logger.LogError(ex,
+                    $"Error al obtener refacciones del trabajo {trabajoId} (orden={orden})");
+
                 return StatusCode(500, new ObtenerRefaccionesCitaResponse
                 {
                     Success = false,
@@ -274,7 +290,6 @@ namespace CarSlineAPI.Controllers
                 });
             }
         }
-
         /// <summary>
         /// Obtener todas las refacciones de una cita completa (todos sus trabajos)
         /// GET api/RefaccionesCita/cita/{citaId}
@@ -301,10 +316,10 @@ namespace CarSlineAPI.Controllers
                         t.Id,
                         t.Trabajo,
                         t.RefaccionesListas,
-                        Refacciones = _db.Refaccionesporcita
+                        Refacciones = _db.RefaccionesCompradas
                             .Where(r => r.TrabajoCitaId == t.Id)
                             .OrderBy(r => r.Id)
-                            .Select(r => new RefaccionPorCitaDto
+                            .Select(r => new RefaccionCompradaDto
                             {
                                 Id = r.Id,
                                 TrabajoCitaId = r.TrabajoCitaId,
@@ -333,17 +348,7 @@ namespace CarSlineAPI.Controllers
             }
         }
 
-        // ============================================
-        // ELIMINAR REFACCIONES
-        // ============================================
 
-        /// <summary>
-        /// Eliminar una refacción de un trabajo de cita
-        /// DELETE api/RefaccionesCita/{refaccionId}
-        ///
-        /// IMPORTANTE: Solo se pueden eliminar refacciones que AÚN NO han sido
-        /// transferidas a una orden (Activo = false).
-        /// </summary>
         [HttpDelete("{refaccionId}")]
         [ProducesResponseType(typeof(EliminarRefaccionCitaResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -352,27 +357,23 @@ namespace CarSlineAPI.Controllers
         {
             try
             {
-                // Traer la refacción junto con el estado de la cita
-                var data = await _db.Refaccionesporcita
+                var data = await _db.RefaccionesCompradas
                     .Where(r => r.Id == refaccionId)
                     .Select(r => new
                     {
                         Refaccion = r,
-                        CitaActiva = r.TrabajoPorCita != null && r.TrabajoPorCita.Cita != null
-                            ? r.TrabajoPorCita.Cita.Activo
-                            : false,
-                        TrabajoCitaId = r.TrabajoCitaId
+                        r.TrabajoCitaId,
+                        r.TrabajoOrdenId
                     })
                     .FirstOrDefaultAsync();
 
                 if (data == null)
-                {
                     return NotFound(new EliminarRefaccionCitaResponse
                     {
                         Success = false,
                         Message = "Refacción no encontrada"
                     });
-                }
+
 
                 // No se puede eliminar si ya fue transferida a una orden
                 if (data.Refaccion.Activo)
@@ -384,20 +385,7 @@ namespace CarSlineAPI.Controllers
                     });
                 }
 
-                _db.Refaccionesporcita.Remove(data.Refaccion);
-
-                // Verificar si el trabajo de cita todavía tiene más refacciones
-                // Si se eliminan todas, desmarcar RefaccionesListas
-                var refaccionesRestantes = await _db.Refaccionesporcita
-                    .CountAsync(r => r.TrabajoCitaId == data.TrabajoCitaId && r.Id != refaccionId);
-
-                if (refaccionesRestantes == 0)
-                {
-                    var trabajoCita = await _db.TrabajosPorCitas.FindAsync(data.TrabajoCitaId);
-                    if (trabajoCita != null)
-                        trabajoCita.RefaccionesListas = false;
-                }
-
+                _db.RefaccionesCompradas.Remove(data.Refaccion); 
                 await _db.SaveChangesAsync();
 
                 _logger.LogInformation($"Refacción de cita {refaccionId} eliminada exitosamente");
@@ -446,7 +434,7 @@ namespace CarSlineAPI.Controllers
 
             try
             {
-                var refaccion = await _db.Refaccionesporcita.FindAsync(refaccionId);
+                var refaccion = await _db.RefaccionesCompradas.FindAsync(refaccionId);
 
                 if (refaccion == null)
                 {

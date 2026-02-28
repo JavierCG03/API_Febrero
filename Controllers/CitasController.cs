@@ -22,9 +22,7 @@ namespace CarSlineAPI.Controllers
         }
 
         [HttpPost("crear-con-trabajos")]
-        public async Task<IActionResult> CrearCitaConTrabajos(
-            [FromBody] CrearCitaConTrabajosRequest request,
-            [FromHeader(Name = "X-User-Id")] int encargadoCitasId)
+        public async Task<IActionResult> CrearCitaConTrabajos([FromBody] CrearCitaConTrabajosRequest request,[FromHeader(Name = "X-User-Id")] int encargadoCitasId)
         {
             if (!ModelState.IsValid)
                 return BadRequest(new { Success = false, Message = "Datos inválidos" });
@@ -143,164 +141,162 @@ namespace CarSlineAPI.Controllers
             }
         }
 
-        [HttpPost("agregar")]
-        [ProducesResponseType(typeof(AgregarRefaccionesResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> AgregarRefacciones([FromBody] AgregarRefaccionesTrabajoRequest request)
-        {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(new AgregarRefaccionesResponse
-                {
-                    Success = false,
-                    Message = "Datos inválidos"
-                });
-            }
-
-            try
-            {
-                // Verificar que el trabajo existe
-                var trabajo = await _db.TrabajosPorOrden
-                    .Include(t => t.OrdenGeneral)
-                    .FirstOrDefaultAsync(t => t.Id == request.TrabajoId && t.Activo);
-
-                if (trabajo == null)
-                {
-                    return NotFound(new AgregarRefaccionesResponse
-                    {
-                        Success = false,
-                        Message = "Trabajo no encontrado"
-                    });
-                }
-
-                // Validar que el trabajo no esté completado o cancelado
-                if (trabajo.EstadoTrabajo == 6)
-                {
-                    return BadRequest(new AgregarRefaccionesResponse
-                    {
-                        Success = false,
-                        Message = "No se pueden agregar refacciones a un trabajo cancelado"
-                    });
-                }
-
-                var refaccionesAgregadas = new List<RefaccionTrabajoDto>();
-                decimal totalRefacciones = 0;
-
-                // Procesar cada refacción
-                foreach (var refaccionDto in request.Refacciones)
-                {
-                    var total = refaccionDto.Cantidad * refaccionDto.PrecioUnitario;
-                    totalRefacciones += total;
-
-                    var refaccionTrabajo = new Refacciontrabajo
-                    {
-                        TrabajoId = request.TrabajoId,
-                        OrdenGeneralId = trabajo.OrdenGeneralId,
-                        Refaccion = refaccionDto.Refaccion,
-                        Cantidad = refaccionDto.Cantidad,
-                        PrecioUnitario = refaccionDto.PrecioUnitario
-                    };
-
-                    _db.Set<Refacciontrabajo>().Add(refaccionTrabajo);
-
-                    refaccionesAgregadas.Add(new RefaccionTrabajoDto
-                    {
-                        Id = 0, // Se asignará después del SaveChanges
-                        TrabajoId = refaccionTrabajo.TrabajoId,
-                        OrdenGeneralId = refaccionTrabajo.OrdenGeneralId,
-                        Refaccion = refaccionTrabajo.Refaccion,
-                        Cantidad = refaccionTrabajo.Cantidad,
-                        PrecioUnitario = refaccionTrabajo.PrecioUnitario,
-                    });
-                }
-
-
-                await _db.SaveChangesAsync();
-
-
-                await _db.Entry(trabajo).ReloadAsync();
-
-                // Actualizar los IDs después de guardar
-                var refaccionesGuardadas = await _db.Set<Refacciontrabajo>()
-                    .Where(r => r.TrabajoId == request.TrabajoId)
-                    .OrderByDescending(r => r.Id)
-                    .Take(request.Refacciones.Count)
-                    .ToListAsync();
-
-                for (int i = 0; i < refaccionesAgregadas.Count && i < refaccionesGuardadas.Count; i++)
-                {
-                    refaccionesAgregadas[i].Id = refaccionesGuardadas[i].Id;
-                }
-
-                _logger.LogInformation(
-                    $"Se agregaron {refaccionesAgregadas.Count} refacciones al trabajo {request.TrabajoId}. " +
-                    $"Total calculado por trigger: ${trabajo.RefaccionesTotal:F2}");
-
-                return Ok(new AgregarRefaccionesResponse
-                {
-                    Success = true,
-                    Message = $"Se agregaron {refaccionesAgregadas.Count} refacción(es) exitosamente",
-                    RefaccionesAgregadas = refaccionesAgregadas,
-                    TotalRefacciones = trabajo.RefaccionesTotal, // ✅ Usar el valor actualizado por el trigger
-                    CantidadRefacciones = refaccionesAgregadas.Count
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error al agregar refacciones al trabajo {request.TrabajoId}");
-                return StatusCode(500, new AgregarRefaccionesResponse
-                {
-                    Success = false,
-                    Message = "Error al agregar refacciones"
-                });
-            }
-        }
-
         [HttpGet("Trabajos-Citas")]
-        public async Task<IActionResult> ObtenerTrabajosCitasPorFecha(
-        [FromQuery] int tipoOrdenId,           // obligatorio
-        [FromQuery] DateTime? fecha = null)   // // opcional, default mañana
+        public async Task<IActionResult> ObtenerTrabajosCitasPorFecha([FromQuery] int tipoOrdenId, [FromQuery] DateTime? fecha = null)
         {
             try
             {
-                var fechaConsulta = (fecha ?? DateTime.Today.AddDays(1)).Date;
+                var fechaConsulta = (fecha ?? DateTime.Today).Date;
                 var fechaSiguiente = fechaConsulta.AddDays(1);
+                var hoy = DateTime.Today;
 
-                var citas = await _db.Citas
-                    .Include(o => o.Vehiculo)
-                    .Include(o => o.Trabajos.Where(t => t.Activo))
-                    .Where(o => o.TipoOrdenId == tipoOrdenId 
-                             && o.Activo 
-                             && o.FechaCita >= fechaConsulta
-                             && o.FechaCita < fechaSiguiente)
-                    .OrderBy(o => o.FechaCita)
-                    .Select(o => new CitaConTrabajosDto
-                    {
-                        Id = o.Id,
-                        TipoOrdenId = o.TipoOrdenId,
-                        VehiculoId= o.VehiculoId,
-                        VehiculoCompleto = $"{o.Vehiculo.Marca}  {o.Vehiculo.Modelo} {o.Vehiculo.Version} / {o.Vehiculo.Anio}",
-                        VIN = o.Vehiculo.VIN,
-                        FechaCita = o.FechaCita,
-                        Trabajos = o.Trabajos
-                            .Where(t => t.Activo)
-                            .Select(t => new TrabajoCitaDto
-                            {
-                                Id = t.Id,
-                                Trabajo = t.Trabajo,
-                                IndicacionesTrabajo = t.IndicacionesTrabajo,
-                                RefaccionesListas =t.RefaccionesListas,
-                            }).ToList()
-                    })
-                    .ToListAsync();
+                var resultado = new List<CitaConTrabajosDto>();
 
-                return Ok(citas);
+                if (fechaConsulta > hoy)
+                {
+                    var citas = await _db.Citas
+                        .Include(c => c.Vehiculo)
+                        .Include(c => c.Trabajos.Where(t => t.Activo))
+                        .Where(c => c.TipoOrdenId == tipoOrdenId
+                                 && c.Activo
+                                 && c.FechaCita >= fechaConsulta
+                                 && c.FechaCita < fechaSiguiente)
+                        .OrderBy(c => c.FechaCita)
+                        .Select(c => new CitaConTrabajosDto
+                        {
+                            Id = c.Id,
+                            OrdenId = null,
+                            Orden = false,
+                            TipoOrdenId = c.TipoOrdenId,
+                            VehiculoId = c.VehiculoId,
+                            VehiculoCompleto = $"{c.Vehiculo.Marca} {c.Vehiculo.Modelo} {c.Vehiculo.Version} / {c.Vehiculo.Anio}",
+                            VIN = c.Vehiculo.VIN,
+                            FechaCita = c.FechaCita,
+                            Trabajos = c.Trabajos
+                                .Where(t => t.Activo)
+                                .Select(t => new TrabajoCitaDto
+                                {
+                                    Id = t.Id,
+                                    Trabajo = t.Trabajo,
+                                    IndicacionesTrabajo = t.IndicacionesTrabajo,
+                                    RefaccionesListas = t.RefaccionesListas
+                                }).ToList()
+                        })
+                        .ToListAsync();
+
+                    resultado.AddRange(citas);
+                }
+                else if (fechaConsulta < hoy)
+                {
+                    var ordenes = await _db.OrdenesGenerales
+                        .Include(o => o.Vehiculo)
+                        .Include(o => o.Trabajos.Where(t => t.Activo))
+                        .Where(o => o.TipoOrdenId == tipoOrdenId
+                                 && o.Activo
+                                 && o.FechaCreacion >= fechaConsulta
+                                 && o.FechaCreacion < fechaSiguiente)
+                        .OrderBy(o => o.FechaCreacion)
+                        .Select(o => new CitaConTrabajosDto
+                        {
+                            Id = null,
+                            OrdenId = o.Id,
+                            Orden = true,
+                            TipoOrdenId = o.TipoOrdenId,
+                            VehiculoId = o.VehiculoId,
+                            VehiculoCompleto = $"{o.Vehiculo.Marca} {o.Vehiculo.Modelo} {o.Vehiculo.Version} / {o.Vehiculo.Anio}",
+                            VIN = o.Vehiculo.VIN,
+                            FechaCita = o.FechaCreacion,
+                            Trabajos = o.Trabajos
+                                .Where(t => t.Activo)
+                                .Select(t => new TrabajoCitaDto
+                                {
+                                    Id = t.Id,
+                                    Trabajo = t.Trabajo,
+                                    IndicacionesTrabajo = t.IndicacionesTrabajo,
+                                    RefaccionesListas = t.RefaccionesListas
+                                }).ToList()
+                        })
+                        .ToListAsync();
+
+                    resultado.AddRange(ordenes);
+                }
+                else
+                {
+                    // Citas activas de hoy (aún no convertidas a orden)
+                    var citasHoy = await _db.Citas
+                        .Include(c => c.Vehiculo)
+                        .Include(c => c.Trabajos.Where(t => t.Activo))
+                        .Where(c => c.TipoOrdenId == tipoOrdenId
+                                 && c.Activo
+                                 && c.FechaCita >= fechaConsulta
+                                 && c.FechaCita < fechaSiguiente)
+                        .OrderBy(c => c.FechaCita)
+                        .Select(c => new CitaConTrabajosDto
+                        {
+                            Id = c.Id,
+                            OrdenId = null,
+                            Orden = false,
+                            TipoOrdenId = c.TipoOrdenId,
+                            VehiculoId = c.VehiculoId,
+                            VehiculoCompleto = $"{c.Vehiculo.Marca} {c.Vehiculo.Modelo} {c.Vehiculo.Version} / {c.Vehiculo.Anio}",
+                            VIN = c.Vehiculo.VIN,
+                            FechaCita = c.FechaCita,
+                            Trabajos = c.Trabajos
+                                .Where(t => t.Activo)
+                                .Select(t => new TrabajoCitaDto
+                                {
+                                    Id = t.Id,
+                                    Trabajo = t.Trabajo,
+                                    IndicacionesTrabajo = t.IndicacionesTrabajo,
+                                    RefaccionesListas = t.RefaccionesListas
+                                }).ToList()
+                        })
+                        .ToListAsync();
+
+                    // Órdenes creadas hoy (citas que ya llegaron y se convirtieron)
+                    var ordenesHoy = await _db.OrdenesGenerales
+                        .Include(o => o.Vehiculo)
+                        .Include(o => o.Trabajos.Where(t => t.Activo))
+                        .Where(o => o.TipoOrdenId == tipoOrdenId
+                                 && o.Activo
+                                 && o.FechaCreacion >= fechaConsulta
+                                 && o.FechaCreacion < fechaSiguiente)
+                        .OrderBy(o => o.FechaCreacion)
+                        .Select(o => new CitaConTrabajosDto
+                        {
+                            Id = null,
+                            OrdenId = o.Id,
+                            Orden = true,
+                            TipoOrdenId = o.TipoOrdenId,
+                            VehiculoId = o.VehiculoId,
+                            VehiculoCompleto = $"{o.Vehiculo.Marca} {o.Vehiculo.Modelo} {o.Vehiculo.Version} / {o.Vehiculo.Anio}",
+                            VIN = o.Vehiculo.VIN,
+                            FechaCita = o.FechaCreacion,
+                            Trabajos = o.Trabajos
+                                .Where(t => t.Activo)
+                                .Select(t => new TrabajoCitaDto
+                                {
+                                    Id = t.Id,
+                                    Trabajo = t.Trabajo,
+                                    IndicacionesTrabajo = t.IndicacionesTrabajo,
+                                    RefaccionesListas = t.RefaccionesListas
+                                }).ToList()
+                        })
+                        .ToListAsync();
+
+                    resultado.AddRange(citasHoy);
+                    resultado.AddRange(ordenesHoy);
+
+                    // Ordenar mezclados por fecha
+                    resultado = resultado.OrderBy(r => r.FechaCita).ToList();
+                }
+
+                return Ok(resultado);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al obtener órdenes");
-                return StatusCode(500, new { Message = "Error al obtener órdenes" });
+                _logger.LogError(ex, "Error al obtener trabajos por fecha");
+                return StatusCode(500, new { Message = "Error al obtener trabajos" });
             }
         }
 

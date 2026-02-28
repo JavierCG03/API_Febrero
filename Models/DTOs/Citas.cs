@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using Microsoft.Extensions.Options;
+using System.ComponentModel.DataAnnotations;
 
 namespace CarSlineAPI.Models.DTOs
 {
@@ -50,14 +51,15 @@ namespace CarSlineAPI.Models.DTOs
     /// </summary>
     public class CitaConTrabajosDto
     {
-        public int Id { get; set; }
+        public int? Id { get; set; }
+        public int? OrdenId { get; set; }
+        public bool Orden{ get; set; } = false; //valor boleano que define si es orden o cita cita=0 orden=1
+
         public int TipoOrdenId { get; set; }
         public int VehiculoId { get; set; }
-        public string VehiculoCompleto{ get; set; } = string.Empty;
+        public string VehiculoCompleto { get; set; } = string.Empty;
         public string VIN { get; set; } = string.Empty;
         public DateTime FechaCita { get; set; }
-
-        // Lista de trabajos
         public List<TrabajoCitaDto> Trabajos { get; set; } = new();
     }
 

@@ -2,13 +2,7 @@
 
 namespace CarSlineAPI.Models.DTOs
 {
-    // ============================================
-    // REQUEST DTOs
-    // ============================================
 
-    /// <summary>
-    /// DTO para agregar una refacción individual a un trabajo de cita
-    /// </summary>
     public class AgregarRefaccionCitaDto
     {
         [Required(ErrorMessage = "El nombre de la refacción es requerido")]
@@ -19,35 +13,37 @@ namespace CarSlineAPI.Models.DTOs
         [Range(1, int.MaxValue, ErrorMessage = "La cantidad debe ser mayor a 0")]
         public int Cantidad { get; set; }
 
-        /// <summary>
-        /// Precio de costo de la refacción (precio de compra)
-        /// </summary>
-        [Required(ErrorMessage = "El precio es requerido")]
+        // Renombrado de Precio → PrecioCompra
+        [Required(ErrorMessage = "El precio de compra es requerido")]
         [Range(0.01, double.MaxValue, ErrorMessage = "El precio debe ser mayor a 0")]
         public decimal Precio { get; set; }
 
-        /// <summary>
-        /// Precio de venta al cliente (opcional al agregar, puede definirse después)
-        /// </summary>
         public decimal? PrecioVenta { get; set; }
     }
 
-    /// <summary>
-    /// Request para agregar múltiples refacciones a un trabajo de cita
-    /// </summary>
-    public class AgregarRefaccionesCitaRequest
+    public class AgregarRefaccionesRequest
     {
-        [Required(ErrorMessage = "El ID del trabajo de cita es requerido")]
-        public int TrabajoCitaId { get; set; }
+        [Required(ErrorMessage = "El ID del trabajo es requerido")]
+        public int TrabajoId { get; set; }
 
-        [Required(ErrorMessage = "Debe agregar al menos una refacción")]
+        public bool Orden { get; set; } = false;
+
+        [Required]
         [MinLength(1, ErrorMessage = "Debe agregar al menos una refacción")]
         public List<AgregarRefaccionCitaDto> Refacciones { get; set; } = new();
     }
 
-    /// <summary>
-    /// Request para actualizar el precio de venta de una refacción de cita
-    /// </summary>
+    // Request SIN CITA - TrabajoOrdenId requerido
+    public class AgregarRefaccionesSinCitaRequest
+    {
+        [Required(ErrorMessage = "El ID del trabajo de orden es requerido")]
+        public int TrabajoOrdenId { get; set; }
+
+        [Required]
+        [MinLength(1, ErrorMessage = "Debe agregar al menos una refacción")]
+        public List<AgregarRefaccionCitaDto> Refacciones { get; set; } = new();
+    }
+
     public class ActualizarPrecioVentaRefaccionCitaRequest
     {
         [Required(ErrorMessage = "El precio de venta es requerido")]
@@ -59,72 +55,68 @@ namespace CarSlineAPI.Models.DTOs
     // RESPONSE DTOs
     // ============================================
 
-    /// <summary>
-    /// DTO de respuesta para una refacción de cita
-    /// </summary>
-    public class RefaccionPorCitaDto
+    public class RefaccionCompradaDto
     {
         public int Id { get; set; }
-        public int TrabajoCitaId { get; set; }
+
+        // Nullable: null cuando viene de orden sin cita
+        public int? TrabajoCitaId { get; set; }
+
+        // Nullable: null cuando la cita aún no se convirtió a orden
+        public int? TrabajoOrdenId { get; set; }
+
         public string Refaccion { get; set; } = string.Empty;
         public int Cantidad { get; set; }
 
-        /// <summary>Precio de costo / compra</summary>
+        // Renombrado de Precio
         public decimal Precio { get; set; }
-
-        /// <summary>Precio de venta al cliente (puede ser null si aún no se define)</summary>
         public decimal? PrecioVenta { get; set; }
 
-        /// <summary>Total calculado con precio de costo</summary>
         public decimal TotalCosto => Cantidad * Precio;
-
-        /// <summary>Total calculado con precio de venta (si está definido)</summary>
         public decimal? TotalVenta => PrecioVenta.HasValue ? Cantidad * PrecioVenta.Value : null;
 
         public DateTime FechaCompra { get; set; }
 
-        /// <summary>
-        /// false = pendiente de transferir a orden, true = ya fue pasada a refaccionestrabajo
-        /// </summary>
+        // true = ya vinculada a una orden de trabajo
         public bool Transferida { get; set; }
-
-        /// <summary>ID del trabajo de orden al que fue transferida (si aplica)</summary>
-        public int? TrabajoOrdenId { get; set; }
     }
 
-    /// <summary>
-    /// Respuesta al agregar refacciones a un trabajo de cita
-    /// </summary>
     public class AgregarRefaccionesCitaResponse
     {
         public bool Success { get; set; }
         public string Message { get; set; } = string.Empty;
-        public List<RefaccionPorCitaDto> RefaccionesAgregadas { get; set; } = new();
+        public List<RefaccionCompradaDto> RefaccionesAgregadas { get; set; } = new();
         public int CantidadRefacciones { get; set; }
         public decimal TotalCosto { get; set; }
     }
 
-    /// <summary>
-    /// Respuesta al eliminar una refacción de cita
-    /// </summary>
     public class EliminarRefaccionCitaResponse
     {
         public bool Success { get; set; }
         public string Message { get; set; } = string.Empty;
     }
 
-    /// <summary>
-    /// Respuesta al obtener refacciones de un trabajo de cita
-    /// </summary>
     public class ObtenerRefaccionesCitaResponse
     {
         public bool Success { get; set; }
         public string Message { get; set; } = string.Empty;
-        public int TrabajoCitaId { get; set; }
-        public string TrabajoCitaNombre { get; set; } = string.Empty;
-        public List<RefaccionPorCitaDto> Refacciones { get; set; } = new();
+        public int TrabajoId { get; set; }
+        public string TrabajoNombre { get; set; } = string.Empty;     
         public decimal TotalCosto { get; set; }
         public decimal? TotalVenta { get; set; }
         public bool RefaccionesListas { get; set; }
+        public List<RefaccionCompradaDto> Refacciones { get; set; } = new();
+    }
+
+    // Nuevo response para consultar refacciones de una orden sin cita
+    public class ObtenerRefaccionesOrdenResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public int TrabajoOrdenId { get; set; }
+        public string TrabajoOrdenNombre { get; set; } = string.Empty;
+        public List<RefaccionCompradaDto> Refacciones { get; set; } = new();
+        public decimal TotalCosto { get; set; }
+        public decimal? TotalVenta { get; set; }
     }
 }

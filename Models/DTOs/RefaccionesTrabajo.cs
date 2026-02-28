@@ -67,8 +67,8 @@ namespace CarSlineAPI.Models.DTOs
         public bool Success { get; set; }
         public string Message { get; set; } = string.Empty;
         public int TrabajoId { get; set; }
-        public string NumeroOrden { get; set; } = string.Empty;
-        public List<RefaccionTrabajoDto> Refacciones { get; set; } = new();
+        public string NumeroOrden { get; set; } = string.Empty;    
         public decimal TotalRefacciones { get; set; }
+        public List<RefaccionTrabajoDto> Refacciones { get; set; } = new();
     }
 }

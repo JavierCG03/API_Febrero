@@ -39,7 +39,7 @@ namespace CarSlineAPI.Controllers
 
                 try
                 {
-                    // 1. Generar número de orden
+                    // ── 1. Generar número de orden ────────────────────────────────
                     var prefijo = request.TipoOrdenId switch
                     {
                         1 => "SRV",
@@ -72,58 +72,87 @@ namespace CarSlineAPI.Controllers
 
                     var numeroOrden = $"{prefijo}-{siguiente:D6}";
 
-                    // 2. Crear orden general
+                    // ── 2. Crear orden general ────────────────────────────────────
                     var ordenGeneral = new OrdenGeneral
                     {
-                        NumeroOrden = numeroOrden,
-                        TipoOrdenId = request.TipoOrdenId,
-                        ClienteId = request.ClienteId,
-                        VehiculoId = request.VehiculoId,
-                        TipoServicioId = request.TipoServicioId,
-                        AsesorId = asesorId,
-                        KilometrajeActual = request.KilometrajeActual,
-                        EstadoOrdenId = 1, // Pendiente
+                        NumeroOrden           = numeroOrden,
+                        TipoOrdenId           = request.TipoOrdenId,
+                        ClienteId             = request.ClienteId,
+                        VehiculoId            = request.VehiculoId,
+                        TipoServicioId        = request.TipoServicioId,
+                        AsesorId              = asesorId,
+                        KilometrajeActual     = request.KilometrajeActual,
+                        EstadoOrdenId         = 1,
                         FechaHoraPromesaEntrega = request.FechaHoraPromesaEntrega,
-                        ObservacionesAsesor = request.ObservacionesAsesor,
-                        CostoTotal = 0, // Se calculará después
-                        FechaCreacion = DateTime.Now,
-                        Activo = true,
-                        TotalTrabajos = request.Trabajos.Count,
-                        TrabajosCompletados = 0,
-                        ProgresoGeneral = 0
+                        ObservacionesAsesor   = request.ObservacionesAsesor,
+                        CostoTotal            = 0,
+                        FechaCreacion         = DateTime.Now,
+                        Activo                = true,
+                        TotalTrabajos         = request.Trabajos.Count,
+                        TrabajosCompletados   = 0,
+                        ProgresoGeneral       = 0
                     };
 
                     _db.OrdenesGenerales.Add(ordenGeneral);
                     await _db.SaveChangesAsync();
 
-                    // 3. Crear trabajos asociados
+                    // ── 3. Crear trabajos y vincular refacciones compradas ────────
                     foreach (var t in request.Trabajos)
                     {
+                        // 3a. Crear el trabajo de orden
                         var trabajo = new TrabajoPorOrden
                         {
-                            OrdenGeneralId = ordenGeneral.Id,
-                            Trabajo = t.Trabajo,
+                            OrdenGeneralId     = ordenGeneral.Id,
+                            Trabajo            = t.Trabajo,
                             IndicacionesTrabajo = string.IsNullOrWhiteSpace(t.Indicaciones) ? null : t.Indicaciones,
-                            EstadoTrabajo = 1,
-                            Activo = true,
-                            FechaCreacion = DateTime.Now
+                            EstadoTrabajo      = 1,
+                            Activo             = true,
+                            FechaCreacion      = DateTime.Now,
+                            TrabajoCitaId      = t.TrabajoCitaId
                         };
 
                         _db.TrabajosPorOrden.Add(trabajo);
+                        await _db.SaveChangesAsync(); // necesario para obtener trabajo.Id
+
+                        // 3b. Si viene de cita, vincular sus refacciones compradas
+                        if (t.TrabajoCitaId.HasValue)
+                        {
+                            var refacciones = await _db.RefaccionesCompradas
+                                .Where(r => r.TrabajoCitaId == t.TrabajoCitaId.Value
+                                         && r.TrabajoOrdenId == null)  // aún no vinculadas
+                                         //&& r.Activo)
+                                .ToListAsync();
+
+                            foreach (var refaccion in refacciones)
+                            {
+                                refaccion.TrabajoOrdenId = trabajo.Id;
+                            }
+
+                            // 3c. Si el trabajosporcita tenía RefaccionesListas = true,
+                            //     heredar ese valor al trabajo de orden
+                            var trabajoCita = await _db.TrabajosPorCitas
+                                .FirstOrDefaultAsync(tc => tc.Id == t.TrabajoCitaId.Value);
+
+                            if (trabajoCita != null)
+                            {
+                                trabajo.RefaccionesListas = trabajoCita.RefaccionesListas;
+                            }
+                        }
                     }
 
                     await _db.SaveChangesAsync();
                     await transaction.CommitAsync();
 
-                    _logger.LogInformation($"Orden {numeroOrden} creada con {request.Trabajos.Count} trabajos");
+                    _logger.LogInformation(
+                        $"Orden {numeroOrden} creada con {request.Trabajos.Count} trabajos");
 
                     return Ok(new
                     {
-                        Success = true,
-                        NumeroOrden = numeroOrden,
-                        OrdenId = ordenGeneral.Id,
+                        Success      = true,
+                        NumeroOrden  = numeroOrden,
+                        OrdenId      = ordenGeneral.Id,
                         TotalTrabajos = request.Trabajos.Count,
-                        Message = "Orden creada exitosamente"
+                        Message      = "Orden creada exitosamente"
                     });
                 }
                 catch (Exception ex)
